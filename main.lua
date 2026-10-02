@@ -2,13 +2,15 @@
     =============================================================================
     SAVIOR.V2 // RUNTIME INSTRUMENTATION & COMBAT TELEMETRY CLIENT
     =============================================================================
+    Target Profile: Rivals & Universal Engine Compatibility
     Interface: Matcha-Slate Architecture (Dual-Column Stacked Cards + 3D Viewport)
+    Defaults: All Options Unchecked (Clean Zero-State Initialization)
     Distribution: GitHub Loadstring Ready
     Repository: github.com/cylixstudios/saviorv2
     =============================================================================
 --]]
 
--- [CLEANUP OF EXISTING INSTANCES]
+-- [ENVIRONMENT CLEANUP]
 if getgenv and getgenv()._SAVIOR_ACTIVE then
     pcall(function() getgenv()._SAVIOR_UNLOAD() end)
 end
@@ -23,7 +25,8 @@ local Services = {
     Workspace = game:GetService("Workspace"),
     CoreGui = game:GetService("CoreGui"),
     GuiService = game:GetService("GuiService"),
-    Stats = game:GetService("Stats")
+    Stats = game:GetService("Stats"),
+    Teams = game:GetService("Teams")
 }
 
 local LocalPlayer = Services.Players.LocalPlayer
@@ -33,38 +36,38 @@ local Camera = Services.Workspace.CurrentCamera
 -- Detect Drawing API support safely
 local HasDrawing = (type(Drawing) == "table" and type(Drawing.new) == "function")
 
--- [MASTER CONFIGURATION]
+-- [MASTER CONFIGURATION // ALL OPTIONS UNCHECKED BY DEFAULT]
 local Config = {
-    MasterEnabled = true,
+    MasterEnabled = false,
 
     -- Aim & Ballistics
     Aim = {
-        Enabled = true,
+        Enabled = false,
         AimKey = Enum.UserInputType.MouseButton2,
         AimKeyCode = Enum.KeyCode.E,
         UseKeyCode = false,
         Priority = "Crosshair", -- "Crosshair", "Distance", "Health"
         AimPart = "Head",       -- "Head", "Torso", "Limbs", "Closest"
         FOV = 130,
-        ShowFOV = true,
+        ShowFOV = false,
         FOVColor = Color3.fromRGB(0, 229, 255),
         Smoothness = 5,
-        LineOfSightCheck = true,
-        Prediction = true,
-        TargetSwitching = true
+        LineOfSightCheck = false,
+        Prediction = false,
+        TargetSwitching = false
     },
 
-    -- Visuals / ESP (Matches Reference UI)
+    -- Visuals / Overlays (Matches Reference Layout - All Default False)
     Visuals = {
-        Enabled = true,
+        Enabled = false,
         TeamCheck = false,
-        VisibleCheck = true,
+        VisibleCheck = false,
         VisibleColor = Color3.fromRGB(75, 140, 255),
         OccludedColor = Color3.fromRGB(255, 60, 80),
         TeamBasedColor = false,
         TextGradient = false,
-        TextBackground = true,
-        Outline = true,
+        TextBackground = false,
+        Outline = false,
         Glow = false,
         SelfESP = false,
         SizingType = "Bounding", -- "Bounding", "Corner", "3D"
@@ -72,7 +75,7 @@ local Config = {
 
         -- Box
         Box = {
-            Enabled = true,
+            Enabled = false,
             FillBox = false,
             BoxType = "2D", -- "2D", "Corner", "Filled"
             Color = Color3.fromRGB(240, 240, 250),
@@ -81,20 +84,20 @@ local Config = {
 
         -- Name
         Name = {
-            Enabled = true,
+            Enabled = false,
             Type = "Name", -- "Name", "DisplayName", "Both"
             Color = Color3.fromRGB(255, 255, 255)
         },
 
         -- Indicators
         Indicators = {
-            Distance = true,
+            Distance = false,
             DistanceColor = Color3.fromRGB(200, 205, 220),
-            EquippedItem = true,
+            EquippedItem = false,
             EquippedColor = Color3.fromRGB(180, 190, 210),
-            Skeleton = true,
+            Skeleton = false,
             SkeletonColor = Color3.fromRGB(245, 245, 250),
-            HeadDot = true,
+            HeadDot = false,
             HeadDotColor = Color3.fromRGB(255, 255, 255),
             HeadDotGlow = false,
             ProfilePicture = false
@@ -102,18 +105,18 @@ local Config = {
 
         -- Health
         Health = {
-            HealthBar = true,
+            HealthBar = false,
             BarColor = Color3.fromRGB(0, 255, 136),
-            HealthBased = true,
-            HealthText = true,
+            HealthBased = false,
+            HealthText = false,
             TextPos = "Above Name" -- "Above Name", "Side", "Bottom"
         },
 
-        -- Chams (Highlights)
+        -- Chams (Native Highlight Overlays)
         Chams = {
-            Enabled = true,
+            Enabled = false,
             Mode = "Default", -- "Default", "Wireframe", "Flat"
-            Filled = true,
+            Filled = false,
             RenderingType = "Static", -- "Static", "Pulse"
             VisibleColor = Color3.fromRGB(75, 140, 255),
             OccludedColor = Color3.fromRGB(255, 50, 80),
@@ -123,7 +126,7 @@ local Config = {
 
         -- Tracer
         Tracer = {
-            Enabled = true,
+            Enabled = false,
             Origin = "Bottom", -- "Bottom", "Center", "Mouse"
             Color = Color3.fromRGB(200, 205, 225)
         }
@@ -131,22 +134,22 @@ local Config = {
 
     -- Reticle / Crosshair
     Crosshair = {
-        Enabled = true,
+        Enabled = false,
         Size = 10,
         Thickness = 2,
         Gap = 5,
         Opacity = 0.95,
         Color = Color3.fromRGB(0, 229, 255),
-        DynamicMovement = true,
-        DynamicShooting = true,
-        Hitmarker = true,
+        DynamicMovement = false,
+        DynamicShooting = false,
+        Hitmarker = false,
         HitmarkerColor = Color3.fromRGB(255, 255, 255)
     },
 
     -- Global Settings
     Settings = {
         UIKey = Enum.KeyCode.RightShift,
-        ConfigFile = "savior_v2_config.json"
+        ConfigFile = "savior_v2_rivals_config.json"
     }
 }
 
@@ -183,6 +186,107 @@ local function RegisterEvent(conn)
     return conn
 end
 
+-- [RIVALS-COMPATIBLE ENTITY RESOLVER]
+-- In Rivals, characters are standard models or located in workspace.Characters/workspace.Players
+local function GetEntityCharacter(player)
+    if not player then return nil end
+
+    -- Primary: Player.Character
+    if player.Character and player.Character.Parent then
+        return player.Character
+    end
+
+    -- Secondary: Workspace direct name lookup
+    local wsChar = Services.Workspace:FindFirstChild(player.Name)
+    if wsChar and wsChar:IsA("Model") then
+        return wsChar
+    end
+
+    -- Tertiary: Check specialized containers common in Rivals
+    local containers = {"Characters", "Players", "Alive", "Entities", "Spawns"}
+    for _, folderName in ipairs(containers) do
+        local folder = Services.Workspace:FindFirstChild(folderName)
+        if folder then
+            local target = folder:FindFirstChild(player.Name)
+            if target and target:IsA("Model") then
+                return target
+            end
+        end
+    end
+
+    return nil
+end
+
+local function GetEntityRoot(character)
+    if not character then return nil end
+    return character:FindFirstChild("HumanoidRootPart")
+        or character:FindFirstChild("HitboxRoot")
+        or character:FindFirstChild("Torso")
+        or character:FindFirstChild("UpperTorso")
+        or character:FindFirstChild("Root")
+end
+
+local function GetEntityHumanoid(character)
+    if not character then return nil end
+    return character:FindFirstChildOfClass("Humanoid")
+end
+
+local function GetEntityHealth(character, humanoid)
+    -- Rivals health can be an Attribute on Character or on Humanoid
+    if character then
+        local hpAttr = character:GetAttribute("Health")
+        if hpAttr and type(hpAttr) == "number" then return hpAttr end
+    end
+    if humanoid then return humanoid.Health end
+    return 100
+end
+
+local function GetEntityMaxHealth(character, humanoid)
+    if character then
+        local maxHpAttr = character:GetAttribute("MaxHealth")
+        if maxHpAttr and type(maxHpAttr) == "number" then return maxHpAttr end
+    end
+    if humanoid then return humanoid.MaxHealth end
+    return 100
+end
+
+local function IsEntityAlive(character)
+    if not character then return false end
+    local hum = GetEntityHumanoid(character)
+    local root = GetEntityRoot(character)
+    if not root then return false end
+
+    -- Check attribute health or humanoid health
+    local hp = GetEntityHealth(character, hum)
+    return hp > 0
+end
+
+-- Team Check Supporting Rivals Team Attributes & Services
+local function IsEntityTeammate(player, character)
+    if not Config.Visuals.TeamCheck then return false end
+    if player == LocalPlayer then return true end
+
+    -- Attribute-based team matching (Rivals standard)
+    if player:GetAttribute("Team") and LocalPlayer:GetAttribute("Team") then
+        return player:GetAttribute("Team") == LocalPlayer:GetAttribute("Team")
+    end
+    if character and LocalPlayer.Character then
+        local cTeam = character:GetAttribute("Team")
+        local lTeam = LocalPlayer.Character:GetAttribute("Team")
+        if cTeam and lTeam then return cTeam == lTeam end
+    end
+
+    -- Engine Team object matching
+    if LocalPlayer.Team and player.Team and LocalPlayer.Team == player.Team then
+        return true
+    end
+    if LocalPlayer.TeamColor and player.TeamColor and LocalPlayer.TeamColor == player.TeamColor then
+        return true
+    end
+
+    return false
+end
+
 -- [MATH & PROJECTION UTILITIES]
 local function WorldToScreen(worldPos)
     local point, onScreen = Camera:WorldToViewportPoint(worldPos)
@@ -197,36 +301,11 @@ local function GetScreenCenter()
     return Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
 end
 
-local function GetRootPart(character)
-    if not character then return nil end
-    return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
-end
-
-local function GetHumanoid(character)
-    if not character then return nil end
-    return character:FindFirstChildOfClass("Humanoid")
-end
-
-local function IsAlive(character)
-    local hum = GetHumanoid(character)
-    return hum and hum.Health > 0
-end
-
-local function IsTeammate(player)
-    if not Config.Visuals.TeamCheck then return false end
-    if player == LocalPlayer then return true end
-    if LocalPlayer.Team and player.Team and LocalPlayer.Team == player.Team then
-        return true
-    end
-    if LocalPlayer.TeamColor and player.TeamColor and LocalPlayer.TeamColor == player.TeamColor then
-        return true
-    end
-    return false
-end
-
 local function CheckLineOfSight(origin, targetPos, character)
     local params = RaycastParams.new()
     params.FilterType = RaycastFilterType.Exclude
+    local ignore = { Camera, LocalPlayer.Character }
+    if character then table.insert(ignore, character) end
     params.FilterDescendantsInstances = { Camera, LocalPlayer.Character }
     params.IgnoreWater = true
 
@@ -240,22 +319,22 @@ local function CheckLineOfSight(origin, targetPos, character)
     return false
 end
 
--- Resolve Target Hitbox Part
+-- Resolve Target Hitbox Part (Rivals Head, Torso, Limbs)
 local function ResolveTargetPart(character, hitboxType)
     if not character then return nil end
     if hitboxType == "Head" then
-        return character:FindFirstChild("Head") or GetRootPart(character)
+        return character:FindFirstChild("Head") or character:FindFirstChild("HitboxHead") or GetEntityRoot(character)
     elseif hitboxType == "Torso" then
-        return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso")
+        return character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso") or GetEntityRoot(character)
     elseif hitboxType == "Limbs" then
         local limbs = {
-            character:FindFirstChild("LeftHand") or character:FindFirstChild("Left Arm"),
-            character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm"),
-            character:FindFirstChild("LeftFoot") or character:FindFirstChild("Left Leg"),
-            character:FindFirstChild("RightFoot") or character:FindFirstChild("Right Leg")
+            character:FindFirstChild("LeftHand") or character:FindFirstChild("Left Arm") or character:FindFirstChild("LeftLowerArm"),
+            character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm") or character:FindFirstChild("RightLowerArm"),
+            character:FindFirstChild("LeftFoot") or character:FindFirstChild("Left Leg") or character:FindFirstChild("LeftLowerLeg"),
+            character:FindFirstChild("RightFoot") or character:FindFirstChild("Right Leg") or character:FindFirstChild("RightLowerLeg")
         }
         for _, p in ipairs(limbs) do if p then return p end end
-        return GetRootPart(character)
+        return GetEntityRoot(character)
     elseif hitboxType == "Closest" then
         local mousePos = GetMouseLocation()
         local bestPart = nil
@@ -272,9 +351,9 @@ local function ResolveTargetPart(character, hitboxType)
                 end
             end
         end
-        return bestPart or GetRootPart(character)
+        return bestPart or GetEntityRoot(character)
     end
-    return character:FindFirstChild("Head") or GetRootPart(character)
+    return character:FindFirstChild("Head") or GetEntityRoot(character)
 end
 
 -- Get Best Target Candidate
@@ -287,10 +366,10 @@ local function GetBestTarget()
     local mousePos = GetMouseLocation()
 
     for _, player in ipairs(Services.Players:GetPlayers()) do
-        if player ~= LocalPlayer and not IsTeammate(player) then
-            local char = player.Character
-            if char and IsAlive(char) then
-                local root = GetRootPart(char)
+        if player ~= LocalPlayer then
+            local char = GetEntityCharacter(player)
+            if char and IsEntityAlive(char) and not IsEntityTeammate(player, char) then
+                local root = GetEntityRoot(char)
                 if root then
                     local part = ResolveTargetPart(char, Config.Aim.AimPart)
                     if part then
@@ -306,8 +385,8 @@ local function GetBestTarget()
                                 if isVisible then
                                     local score = 0
                                     local dist3D = (Camera.CFrame.Position - part.Position).Magnitude
-                                    local hum = GetHumanoid(char)
-                                    local hp = hum and hum.Health or 100
+                                    local hum = GetEntityHumanoid(char)
+                                    local hp = GetEntityHealth(char, hum)
 
                                     if Config.Aim.Priority == "Crosshair" then
                                         score = fovDist
@@ -351,11 +430,11 @@ local function ApplyAim(targetPart)
     Camera.CFrame = currentCF:Lerp(targetCF, lerpRatio)
 end
 
--- Priority Render Binding (Runs after Roblox Camera script to eliminate jitter)
+-- Bind Aim to Post-Camera RenderStep
 Services.RunService:BindToRenderStep("SaviorAimExecution", Enum.RenderPriority.Camera.Value + 1, function()
     if Telemetry.IsAiming and Config.MasterEnabled and Config.Aim.Enabled and Telemetry.CurrentTarget then
-        local char = Telemetry.CurrentTarget.Character
-        if char and IsAlive(char) then
+        local char = GetEntityCharacter(Telemetry.CurrentTarget)
+        if char and IsEntityAlive(char) then
             local part = ResolveTargetPart(char, Config.Aim.AimPart)
             if part then
                 ApplyAim(part)
@@ -562,12 +641,11 @@ local function RenderSkeleton(char, visualSet, color)
     end
 end
 
--- Native Highlight Chams Handler
-local function UpdateChams(player, isVisible)
-    local char = player.Character
+-- Highlight Chams Handler
+local function UpdateChams(player, char, isVisible)
     if not char then return end
 
-    if Config.MasterEnabled and Config.Visuals.Enabled and Config.Visuals.Chams.Enabled and not IsTeammate(player) and IsAlive(char) then
+    if Config.MasterEnabled and Config.Visuals.Enabled and Config.Visuals.Chams.Enabled and not IsEntityTeammate(player, char) and IsEntityAlive(char) then
         local hl = Registry.ChamsPool[player]
         if not hl or hl.Parent ~= char then
             pcall(function() if hl then hl:Destroy() end end)
@@ -715,8 +793,8 @@ local function BuildMatchaInterface()
     RightStatus.Position = UDim2.new(1, -136, 0, 0)
     RightStatus.BackgroundTransparency = 1
     RightStatus.Font = Enum.Font.GothamMedium
-    RightStatus.Text = "Dejected"
-    RightStatus.TextColor3 = Palette.TextMuted
+    RightStatus.Text = "Rivals Active"
+    RightStatus.TextColor3 = Palette.AccentGreen
     RightStatus.TextSize = 12
     RightStatus.TextXAlignment = Enum.TextXAlignment.Right
     RightStatus.Parent = TopBar
@@ -734,7 +812,6 @@ local function BuildMatchaInterface()
     TabBarLayout.Padding = UDim.new(0, 6)
     TabBarLayout.Parent = TabBar
 
-    local PrimaryTabs = {"Combat", "Visuals", "World", "Character", "Configs"}
     local PrimaryTabButtons = {}
     local PrimaryTabPages = {}
 
@@ -788,13 +865,13 @@ local function BuildMatchaInterface()
     BuildTag.Position = UDim2.new(1, -130, 0, 0)
     BuildTag.BackgroundTransparency = 1
     BuildTag.Font = Enum.Font.Gotham
-    BuildTag.Text = "Build: Aug 22 2026"
+    BuildTag.Text = "Build: Oct 2026"
     BuildTag.TextColor3 = Palette.TextMuted
     BuildTag.TextSize = 10
     BuildTag.TextXAlignment = Enum.TextXAlignment.Right
     BuildTag.Parent = Footer
 
-    -- [RIGHT DETACHED 3D PREVIEW WINDOW (MATCHES IMAGE)]
+    -- [3D PREVIEW WINDOW]
     local PreviewFrame = Instance.new("Frame")
     PreviewFrame.Name = "PreviewFrame"
     PreviewFrame.Size = UDim2.new(0, 270, 0, 390)
@@ -808,7 +885,6 @@ local function BuildMatchaInterface()
     PreviewStroke.Color = Palette.CardBorder
     PreviewStroke.Thickness = 1.2
 
-    -- Preview Window Dragging
     local isDraggingPreview = false
     local prevDragStart, prevStartPos
     PreviewFrame.InputBegan:Connect(function(input)
@@ -830,7 +906,6 @@ local function BuildMatchaInterface()
         end
     end)
 
-    -- Preview Header Tabs
     local PrevHeader = Instance.new("Frame")
     PrevHeader.Size = UDim2.new(1, -20, 0, 32)
     PrevHeader.Position = UDim2.new(0, 10, 0, 10)
@@ -864,7 +939,6 @@ local function BuildMatchaInterface()
     CreatePrevPill("Preview", false)
     CreatePrevPill("3D", true)
 
-    -- Real ViewportFrame for 3D Character Model
     local Viewport = Instance.new("ViewportFrame")
     Viewport.Size = UDim2.new(1, -24, 1, -54)
     Viewport.Position = UDim2.new(0, 12, 0, 44)
@@ -873,7 +947,6 @@ local function BuildMatchaInterface()
     Viewport.Parent = PreviewFrame
     Instance.new("UICorner", Viewport).CornerRadius = UDim.new(0, 8)
 
-    -- Viewport Camera & Dummy Model Setup
     local vCamera = Instance.new("Camera")
     vCamera.Parent = Viewport
     Viewport.CurrentCamera = vCamera
@@ -895,14 +968,13 @@ local function BuildMatchaInterface()
         return p
     end
 
-    local dHead = MakePart("Head", Vector3.new(1.2, 1.2, 1.2), CFrame.new(0, 1.6, 0), Color3.fromRGB(255, 255, 255))
-    local dTorso = MakePart("Torso", Vector3.new(2, 2, 1), CFrame.new(0, 0, 0), Color3.fromRGB(230, 230, 235))
-    local dLeftArm = MakePart("Left Arm", Vector3.new(1, 2, 1), CFrame.new(-1.6, 0, 0), Color3.fromRGB(40, 40, 45))
-    local dRightArm = MakePart("Right Arm", Vector3.new(1, 2, 1), CFrame.new(1.6, 0, 0), Color3.fromRGB(40, 40, 45))
-    local dLeftLeg = MakePart("Left Leg", Vector3.new(1, 2, 1), CFrame.new(-0.55, -2, 0), Color3.fromRGB(25, 25, 30))
-    local dRightLeg = MakePart("Right Leg", Vector3.new(1, 2, 1), CFrame.new(0.55, -2, 0), Color3.fromRGB(25, 25, 30))
+    MakePart("Head", Vector3.new(1.2, 1.2, 1.2), CFrame.new(0, 1.6, 0), Color3.fromRGB(255, 255, 255))
+    MakePart("Torso", Vector3.new(2, 2, 1), CFrame.new(0, 0, 0), Color3.fromRGB(230, 230, 235))
+    MakePart("Left Arm", Vector3.new(1, 2, 1), CFrame.new(-1.6, 0, 0), Color3.fromRGB(40, 40, 45))
+    MakePart("Right Arm", Vector3.new(1, 2, 1), CFrame.new(1.6, 0, 0), Color3.fromRGB(40, 40, 45))
+    MakePart("Left Leg", Vector3.new(1, 2, 1), CFrame.new(-0.55, -2, 0), Color3.fromRGB(25, 25, 30))
+    MakePart("Right Leg", Vector3.new(1, 2, 1), CFrame.new(0.55, -2, 0), Color3.fromRGB(25, 25, 30))
 
-    -- Simulated Preview Overlay Wireframe (Matches image.png)
     local PrevBox = Instance.new("Frame")
     PrevBox.Size = UDim2.new(0, 120, 0, 210)
     PrevBox.Position = UDim2.new(0.5, -60, 0.5, -105)
@@ -913,12 +985,14 @@ local function BuildMatchaInterface()
     local PrevBoxStroke = Instance.new("UIStroke", PrevBox)
     PrevBoxStroke.Color = Color3.fromRGB(240, 240, 250)
     PrevBoxStroke.Thickness = 1.2
+    PrevBoxStroke.Enabled = false
 
     local PrevHealthBar = Instance.new("Frame")
     PrevHealthBar.Size = UDim2.new(0, 3, 1, 0)
     PrevHealthBar.Position = UDim2.new(0, -7, 0, 0)
     PrevHealthBar.BackgroundColor3 = Palette.AccentGreen
     PrevHealthBar.BorderSizePixel = 0
+    PrevHealthBar.Visible = false
     PrevHealthBar.Parent = PrevBox
 
     local PrevNameTag = Instance.new("TextLabel")
@@ -929,6 +1003,7 @@ local function BuildMatchaInterface()
     PrevNameTag.Text = "Target_Player"
     PrevNameTag.TextColor3 = Color3.fromRGB(255, 255, 255)
     PrevNameTag.TextSize = 10
+    PrevNameTag.Visible = false
     PrevNameTag.Parent = PrevBox
 
     local PrevDistTag = Instance.new("TextLabel")
@@ -939,9 +1014,9 @@ local function BuildMatchaInterface()
     PrevDistTag.Text = "42m"
     PrevDistTag.TextColor3 = Palette.TextMuted
     PrevDistTag.TextSize = 9
+    PrevDistTag.Visible = false
     PrevDistTag.Parent = PrevBox
 
-    -- Smooth rotating preview camera
     local rotAngle = 0
     RegisterEvent(Services.RunService.RenderStepped:Connect(function(dt)
         rotAngle = rotAngle + (dt * 0.45)
@@ -950,7 +1025,7 @@ local function BuildMatchaInterface()
         vCamera.CFrame = CFrame.new(Vector3.new(camX, 0.2, camZ), Vector3.new(0, 0, 0))
     end))
 
-    -- [COMPONENT CREATORS FOR CARDS]
+    -- [COMPONENT CREATORS]
     local function CreateCard(parent, title)
         local card = Instance.new("Frame")
         card.BackgroundColor3 = Palette.Card
@@ -1030,10 +1105,8 @@ local function BuildMatchaInterface()
         label.TextXAlignment = Enum.TextXAlignment.Left
         label.Parent = row
 
-        -- Optional color indicator boxes on the right (like image.png)
         if colorSwatch then
             if type(colorSwatch) == "table" then
-                -- Dual swatches (e.g. visible blue & occluded red)
                 local s1 = Instance.new("Frame")
                 s1.Size = UDim2.new(0, 12, 0, 12)
                 s1.Position = UDim2.new(1, -28, 0.5, -6)
@@ -1236,10 +1309,9 @@ local function BuildMatchaInterface()
         return page
     end
 
-    -- 1. VISUALS TAB (Matches image.png)
+    -- 1. VISUALS TAB (Matches image.png - All Default False)
     local VisualsPage = CreateTabPage("Visuals", true)
 
-    -- Sub Navigation Pill Bar
     local SubNav = Instance.new("Frame")
     SubNav.Size = UDim2.new(1, 0, 0, 26)
     SubNav.BackgroundTransparency = 1
@@ -1273,7 +1345,6 @@ local function BuildMatchaInterface()
     CreateSubPill("Misc", false)
     CreateSubPill("Flaggs", false)
 
-    -- Dual Column Scrolling Container
     local DualColScroll = Instance.new("ScrollingFrame")
     DualColScroll.Size = UDim2.new(1, 0, 1, -34)
     DualColScroll.Position = UDim2.new(0, 0, 0, 34)
@@ -1311,8 +1382,8 @@ local function BuildMatchaInterface()
     end)
 
     -- [COLUMN 1 CARDS]
-    -- Card 1: Main Controls
     local MainCard = CreateCard(Col1, nil)
+    AddCheckbox(MainCard, "Master Enable", Config.MasterEnabled, function(v) Config.MasterEnabled = v end)
     AddCheckbox(MainCard, "Enabled", Config.Visuals.Enabled, function(v) Config.Visuals.Enabled = v end)
     AddCheckbox(MainCard, "Team Check", Config.Visuals.TeamCheck, function(v) Config.Visuals.TeamCheck = v end)
     AddCheckbox(MainCard, "Visible Check", Config.Visuals.VisibleCheck, function(v) Config.Visuals.VisibleCheck = v end, {Config.Visuals.VisibleColor, Config.Visuals.OccludedColor})
@@ -1325,16 +1396,14 @@ local function BuildMatchaInterface()
     AddDropdown(MainCard, "Sizing Type", {"Bounding", "Corner", "3D"}, Config.Visuals.SizingType, function(v) Config.Visuals.SizingType = v end)
     AddSlider(MainCard, "Render Distance", 100, 3000, Config.Visuals.RenderDistance, function(v) Config.Visuals.RenderDistance = v end)
 
-    -- Card 2: Box
     local BoxCard = CreateCard(Col1, "Box")
     AddCheckbox(BoxCard, "Enabled", Config.Visuals.Box.Enabled, function(v)
         Config.Visuals.Box.Enabled = v
-        PrevBoxStroke.Visible = v
+        PrevBoxStroke.Enabled = v
     end, Config.Visuals.Box.Color)
     AddCheckbox(BoxCard, "Fill Box", Config.Visuals.Box.FillBox, function(v) Config.Visuals.Box.FillBox = v end, Config.Visuals.Box.FillColor)
     AddDropdown(BoxCard, "Box Type", {"2D", "Corner", "Filled"}, Config.Visuals.Box.BoxType, function(v) Config.Visuals.Box.BoxType = v end)
 
-    -- Card 3: Name
     local NameCard = CreateCard(Col1, "Name")
     AddCheckbox(NameCard, "Enabled", Config.Visuals.Name.Enabled, function(v)
         Config.Visuals.Name.Enabled = v
@@ -1343,7 +1412,6 @@ local function BuildMatchaInterface()
     AddDropdown(NameCard, "Type", {"Name", "DisplayName", "Both"}, Config.Visuals.Name.Type, function(v) Config.Visuals.Name.Type = v end)
 
     -- [COLUMN 2 CARDS]
-    -- Card 1: Indicators
     local IndCard = CreateCard(Col2, "Indicators")
     AddCheckbox(IndCard, "Distance", Config.Visuals.Indicators.Distance, function(v)
         Config.Visuals.Indicators.Distance = v
@@ -1355,7 +1423,6 @@ local function BuildMatchaInterface()
     AddCheckbox(IndCard, "Head Dot Glow", Config.Visuals.Indicators.HeadDotGlow, function(v) Config.Visuals.Indicators.HeadDotGlow = v end)
     AddCheckbox(IndCard, "Profile Picture", Config.Visuals.Indicators.ProfilePicture, function(v) Config.Visuals.Indicators.ProfilePicture = v end)
 
-    -- Card 2: Health
     local HealthCard = CreateCard(Col2, "Health")
     AddCheckbox(HealthCard, "Health Bar", Config.Visuals.Health.HealthBar, function(v)
         Config.Visuals.Health.HealthBar = v
@@ -1365,19 +1432,17 @@ local function BuildMatchaInterface()
     AddCheckbox(HealthCard, "Health Text", Config.Visuals.Health.HealthText, function(v) Config.Visuals.Health.HealthText = v end)
     AddDropdown(HealthCard, "Text Pos", {"Above Name", "Side", "Bottom"}, Config.Visuals.Health.TextPos, function(v) Config.Visuals.Health.TextPos = v end)
 
-    -- Card 3: Chams
     local ChamsCard = CreateCard(Col2, "Chams")
     AddDropdown(ChamsCard, "Mode", {"Default", "Wireframe", "Flat"}, Config.Visuals.Chams.Mode, function(v) Config.Visuals.Chams.Mode = v end)
     AddCheckbox(ChamsCard, "Enabled", Config.Visuals.Chams.Enabled, function(v) Config.Visuals.Chams.Enabled = v end, {Config.Visuals.Chams.VisibleColor, Config.Visuals.Chams.OccludedColor})
     AddCheckbox(ChamsCard, "Filled", Config.Visuals.Chams.Filled, function(v) Config.Visuals.Chams.Filled = v end, Color3.fromRGB(255, 255, 255))
     AddDropdown(ChamsCard, "Rendering Type", {"Static", "Pulse"}, Config.Visuals.Chams.RenderingType, function(v) Config.Visuals.Chams.RenderingType = v end)
 
-    -- Card 4: Tracer
     local TracerCard = CreateCard(Col2, "Tracer")
     AddCheckbox(TracerCard, "Enabled", Config.Visuals.Tracer.Enabled, function(v) Config.Visuals.Tracer.Enabled = v end, Config.Visuals.Tracer.Color)
     AddDropdown(TracerCard, "Origin", {"Bottom", "Center", "Mouse"}, Config.Visuals.Tracer.Origin, function(v) Config.Visuals.Tracer.Origin = v end)
 
-    -- 2. COMBAT TAB
+    -- 2. COMBAT TAB (All Default False)
     local CombatPage = CreateTabPage("Combat", false)
     local CombatCol1 = Instance.new("Frame")
     CombatCol1.Size = UDim2.new(0.485, 0, 1, 0)
@@ -1394,6 +1459,7 @@ local function BuildMatchaInterface()
 
     local AimCard = CreateCard(CombatCol1, "Targeting Module")
     AddCheckbox(AimCard, "Aim Assist Enabled", Config.Aim.Enabled, function(v) Config.Aim.Enabled = v end)
+    AddCheckbox(AimCard, "Show FOV Circle", Config.Aim.ShowFOV, function(v) Config.Aim.ShowFOV = v end)
     AddDropdown(AimCard, "Priority", {"Crosshair", "Distance", "Health"}, Config.Aim.Priority, function(v) Config.Aim.Priority = v end)
     AddDropdown(AimCard, "Hitbox Part", {"Head", "Torso", "Limbs", "Closest"}, Config.Aim.AimPart, function(v) Config.Aim.AimPart = v end)
     AddSlider(AimCard, "Field Of View", 30, 450, Config.Aim.FOV, function(v)
@@ -1555,7 +1621,7 @@ local function UpdateCrosshair()
     local size = Config.Crosshair.Size
 
     if Config.Crosshair.DynamicMovement and LocalPlayer.Character then
-        local hum = GetHumanoid(LocalPlayer.Character)
+        local hum = GetEntityHumanoid(LocalPlayer.Character)
         if hum and hum.MoveDirection.Magnitude > 0 then gap = gap + 4 end
     end
     if Config.Crosshair.DynamicShooting and Telemetry.IsFiring then gap = gap + 6 end
@@ -1618,11 +1684,13 @@ RegisterEvent(Services.RunService.RenderStepped:Connect(function()
     Telemetry.CurrentTarget = targetPlayer
 
     -- Target Damage Delta Tracking
-    if targetPlayer and targetPlayer.Character then
-        local hum = GetHumanoid(targetPlayer.Character)
-        if hum then
-            if Telemetry.LastTargetHP > 0 and hum.Health < Telemetry.LastTargetHP then
-                local delta = Telemetry.LastTargetHP - hum.Health
+    if targetPlayer then
+        local char = GetEntityCharacter(targetPlayer)
+        if char then
+            local hum = GetEntityHumanoid(char)
+            local hp = GetEntityHealth(char, hum)
+            if Telemetry.LastTargetHP > 0 and hp < Telemetry.LastTargetHP then
+                local delta = Telemetry.LastTargetHP - hp
                 Telemetry.Hits = Telemetry.Hits + 1
                 Telemetry.TotalDamage = Telemetry.TotalDamage + delta
                 Telemetry.HitmarkerAlpha = 1.0
@@ -1630,7 +1698,7 @@ RegisterEvent(Services.RunService.RenderStepped:Connect(function()
                     Telemetry.Headshots = Telemetry.Headshots + 1
                 end
             end
-            Telemetry.LastTargetHP = hum.Health
+            Telemetry.LastTargetHP = hp
         end
     else
         Telemetry.LastTargetHP = 0
@@ -1662,13 +1730,13 @@ RegisterEvent(Services.RunService.RenderStepped:Connect(function()
                 Registry.VisualPool[player] = CreatePlayerVisualSet()
             end
             local set = Registry.VisualPool[player]
-            local char = player.Character
-            local shouldRender = Config.MasterEnabled and Config.Visuals.Enabled and char and IsAlive(char) and not IsTeammate(player)
+            local char = GetEntityCharacter(player)
+            local shouldRender = Config.MasterEnabled and Config.Visuals.Enabled and char and IsEntityAlive(char) and not IsEntityTeammate(player, char)
 
             if shouldRender then
-                local root = GetRootPart(char)
-                local hum = GetHumanoid(char)
-                if root and hum then
+                local root = GetEntityRoot(char)
+                local hum = GetEntityHumanoid(char)
+                if root then
                     local dist = (Camera.CFrame.Position - root.Position).Magnitude
                     if dist <= Config.Visuals.RenderDistance then
                         local rootPos, onScreen = WorldToScreen(root.Position)
@@ -1677,14 +1745,14 @@ RegisterEvent(Services.RunService.RenderStepped:Connect(function()
                             isVisible = CheckLineOfSight(Camera.CFrame.Position, root.Position, char)
                         end
 
-                        UpdateChams(player, isVisible)
+                        UpdateChams(player, char, isVisible)
 
                         if onScreen and set then
                             local themeCol = isVisible and Config.Visuals.VisibleColor or Config.Visuals.OccludedColor
 
-                            -- Box bounds
-                            local head = char:FindFirstChild("Head")
-                            local headPos = head and WorldToScreen(head.Position + Vector3.new(0, 0.5, 0)) or Vector2.new(rootPos.X, rootPos.Y - 20)
+                            -- Accurate Bounding Box Calculation
+                            local head = char:FindFirstChild("Head") or root
+                            local headPos = WorldToScreen(head.Position + Vector3.new(0, 0.5, 0))
                             local legPos = WorldToScreen(root.Position - Vector3.new(0, 3, 0))
                             local boxHeight = math.abs(headPos.Y - legPos.Y)
                             local boxWidth = math.max(boxHeight * 0.65, 12)
@@ -1734,9 +1802,18 @@ RegisterEvent(Services.RunService.RenderStepped:Connect(function()
                                 set.Distance.Visible = false
                             end
 
-                            -- Equipped Tool
+                            -- Equipped Tool / Weapon (Rivals Weapon Detection)
                             if Config.Visuals.Indicators.EquippedItem then
                                 local tool = char:FindFirstChildOfClass("Tool")
+                                if not tool then
+                                    -- Check weapon models welded to character hands/torso in Rivals
+                                    for _, child in ipairs(char:GetChildren()) do
+                                        if child:IsA("Model") and (string.find(child.Name:lower(), "gun") or string.find(child.Name:lower(), "weapon") or string.find(child.Name:lower(), "rifle")) then
+                                            tool = child
+                                            break
+                                        end
+                                    end
+                                end
                                 if tool then
                                     set.Equipped.Position = Vector2.new(rootPos.X, boxTopLeft.Y + boxHeight + (Config.Visuals.Indicators.Distance and 16 or 2))
                                     set.Equipped.Text = "[" .. tool.Name .. "]"
@@ -1749,9 +1826,11 @@ RegisterEvent(Services.RunService.RenderStepped:Connect(function()
                                 set.Equipped.Visible = false
                             end
 
-                            -- Health Bar
+                            -- Health Bar & Health Calculation
                             if Config.Visuals.Health.HealthBar then
-                                local pct = math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1)
+                                local curHp = GetEntityHealth(char, hum)
+                                local maxHp = GetEntityMaxHealth(char, hum)
+                                local pct = math.clamp(curHp / math.max(maxHp, 1), 0, 1)
                                 local barWidth = 3
                                 local barHeight = boxHeight * pct
                                 local barX = boxTopLeft.X - 6
@@ -1807,15 +1886,15 @@ RegisterEvent(Services.RunService.RenderStepped:Connect(function()
                         end
                     else
                         HideVisualSet(set)
-                        UpdateChams(player, false)
+                        UpdateChams(player, char, false)
                     end
                 else
                     HideVisualSet(set)
-                    UpdateChams(player, false)
+                    UpdateChams(player, char, false)
                 end
             else
                 HideVisualSet(set)
-                UpdateChams(player, false)
+                UpdateChams(player, char, false)
             end
         end
     end
@@ -1857,4 +1936,4 @@ if getgenv then
     getgenv()._SAVIOR_UNLOAD = Unload
 end
 
-print("[SAVIOR.V2] // Matcha-Slate Architecture Initialized (Toggle: RightShift)")
+print("[SAVIOR.V2] // Rivals Engine Compatibility Initialized (All options unchecked)")
